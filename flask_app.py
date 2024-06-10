@@ -1,11 +1,17 @@
 from flask import Flask, render_template
+import solara_app
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
 @app.route('/')
 def index():
-    # Render the index.html template
-    return render_template('index.html')
+    try:
+        disaster_data = solara_app.fetch_disaster_data()
+    except Exception as e:
+        disaster_data = []
+        print(f"Error fetching disaster data: {e}")
 
-if __name__ == "__main__":
+    return render_template('index.html', disasters=disaster_data)
+
+if __name__ == '__main__':
     app.run(debug=True)
