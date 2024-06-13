@@ -14,6 +14,19 @@ Original file is located at
 import json
 import requests
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from collections import Counter
+import matplotlib.pyplot as plt
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # ReliefWeb API endpoint
 url = "https://api.reliefweb.int/v1/disasters"
@@ -73,12 +86,6 @@ if response.status_code == 200:
 else:
     print("Failed to retrieve data. Status code:", response.status_code)
     print("Response Content:", response.content)
-
-import pandas as pd
-import json
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from collections import Counter
 
 # Function to tokenize text and remove stopwords
 def tokenize_and_remove_stopwords(text):
@@ -192,8 +199,6 @@ data = {
 }
 df = pd.DataFrame(data)
 
-import matplotlib.pyplot as plt
-
 # Part 1: Split 'name' into 'country', 'disaster_type', and 'year'
 # Assuming df is already defined and contains the 'name' column
 
@@ -254,8 +259,6 @@ merged_df.to_csv(final_csv, index=False)
 
 print(f"Final merged data saved to {final_csv}")
 
-import matplotlib.pyplot as plt
-
 # Assuming merged_df is already loaded with the updated data
 
 # Step 1: Check columns in merged_df
@@ -274,8 +277,6 @@ plt.xticks(rotation=90)
 plt.legend(title='Disaster Type', bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
 plt.show()
-
-import seaborn as sns
 
 # Step 1: Read the CSV file
 file_path = '/content/processed_final_disaster_data.csv'
@@ -326,13 +327,6 @@ plt.show()
 
 # Print a sample of the "disaster_type" column
 print(df['disaster_type'].head())
-
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Assuming 'cases_count' is your target variable, and other columns are features
 # Drop columns that cannot be processed (e.g., 'date' if it's causing issues)
