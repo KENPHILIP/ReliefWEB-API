@@ -17,9 +17,8 @@ The `main` function coordinates the entire process by creating a main folder (`.
 
 import os
 import requests
-import urllib.parse
 import openpyxl
-import pandas as pd
+from urllib.parse import urlencode, quote_plus
 
 # Define the endpoint URL
 endpoint_url = "https://dtm.iom.int/data-and-analysis/dtm-api"
@@ -37,61 +36,42 @@ components = [
     "Site Assessment", "Baseline Assessment"
 ]
 
-# Function to download and save datasets for a given country and year range as Excel
-def download_country_datasets(country, start_year=2000, end_year=2024):
-    # Create directory for country if it doesn't exist
-    country_folder = f"./DTM_IOM_datasets/{country}"
-    os.makedirs(country_folder, exist_ok=True)
+# Create a main folder for all datasets
+output_folder = "./DTM_IOM_datasets"
+os.makedirs(output_folder, exist_ok=True)
 
+# Function to fetch datasets for a given country and year range
+def fetch_datasets(country, start_year=2000, end_year=2024):
     for year in range(start_year, end_year + 1):
-        # Construct URL for the specific country's dataset and year
-        country_url = f"{endpoint_url}?country={urllib.parse.quote(country)}&dataset_type=info_sheet&regional_dataset=all&year={year}"
-
-        # Add components to the URL
         for component in components:
-            country_url += f"&components[]={urllib.parse.quote(component)}"
+            params = {
+                "country": country,
+                "dataset_type": "info_sheet",
+                "regional_dataset": "all",
+                "year": year,
+                "components[]": component
+            }
+            url = f"{endpoint_url}?{urlencode(params, quote_via=quote_plus)}"
 
-        # Make a GET request to fetch the data
-        response = requests.get(country_url)
+            try:
+                response = requests.get(url)
+                if response.status_code == 200:
+                    # Save the response content (Excel file) directly to the output folder
+                    filename = f"{country}_DTM_data_{year}_{component.replace(' ', '_')}.xlsx"
+                    filepath = os.path.join(output_folder, filename)
+                    with open(filepath, 'wb') as f:
+                        f.write(response.content)
+                    print(f"Downloaded {filename}")
+                else:
+                    print(f"Failed to download {country} datasets for {year}, {component}. Status code: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching {country} datasets for {year}, {component}: {e}")
 
-        # Check if request was successful
-        if response.status_code == 200:
-            # Save the dataset to an Excel file
-            filename = f"{country}_DTM_data_{year}.xlsx"
-            filepath = os.path.join(country_folder, filename)
-
-            # Write content to Excel file
-            with open(filepath, 'wb') as f:
-                f.write(response.content)
-
-            print(f"Datasets for {country} in {year} downloaded and saved.")
-        else:
-            print(f"Failed to retrieve datasets for {country} in {year}. Status code: {response.status_code}")
-
-# Function to read and display titles of the downloaded files for a given country
-def display_file_titles(country):
-    country_folder = f"./DTM_IOM_datasets/{country}"
-    if os.path.exists(country_folder):
-        for filename in os.listdir(country_folder):
-            if filename.endswith('.xlsx'):
-                filepath = os.path.join(country_folder, filename)
-                try:
-                    workbook = openpyxl.load_workbook(filepath)
-                    sheet_titles = workbook.sheetnames
-                    print(f"{filename}: {sheet_titles}")
-                except Exception as e:
-                    print(f"Failed to read {filename}: {e}")
-    else:
-        print(f"No datasets found for {country}.")
-
-# Main loop to download datasets for all East and Horn of Africa countries and all years
+# Main function to iterate over all countries and fetch datasets
 def main():
-    # Create a main folder for all datasets
-    os.makedirs("./DTM_IOM_datasets", exist_ok=True)
-
     for country in east_horn_africa_countries:
-        download_country_datasets(country)
-        display_file_titles(country)
+        fetch_datasets(country)
 
 if __name__ == "__main__":
     main()
+
