@@ -17,11 +17,13 @@ The `main` function coordinates the entire process by creating a main folder (`.
 
 import os
 import requests
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 import openpyxl
-from urllib.parse import urlencode, quote_plus
 
-# Define the endpoint URL
-endpoint_url = "https://dtm.iom.int/data-and-analysis/dtm-api"
+# Define the base URL and the URL to start scraping from
+base_url = "https://dtm.iom.int"
+start_url = "https://dtm.iom.int/datasets"
 
 # List of East and Horn of Africa countries in ICPAC
 east_horn_africa_countries = [
@@ -29,48 +31,70 @@ east_horn_africa_countries = [
     "Rwanda", "Somalia", "South Sudan", "Sudan", "Tanzania", "Uganda"
 ]
 
-# Dataset components to include
-components = [
-    "Mobility Tracking", "Event Tracking", "Village Assessment",
-    "Survey", "Community Perceptions", "Displacement Solutions",
-    "Site Assessment", "Baseline Assessment"
-]
-
 # Create a main folder for all datasets
 output_folder = "./DTM_IOM_datasets"
 os.makedirs(output_folder, exist_ok=True)
 
-# Function to fetch datasets for a given country and year range
-def fetch_datasets(country, start_year=2000, end_year=2024):
-    for year in range(start_year, end_year + 1):
-        for component in components:
-            params = {
-                "country": country,
-                "dataset_type": "info_sheet",
-                "regional_dataset": "all",
-                "year": year,
-                "components[]": component
-            }
-            url = f"{endpoint_url}?{urlencode(params, quote_via=quote_plus)}"
-
-            try:
-                response = requests.get(url)
-                if response.status_code == 200:
-                    # Save the response content (Excel file) directly to the output folder
-                    filename = f"{country}_DTM_data_{year}_{component.replace(' ', '_')}.xlsx"
-                    filepath = os.path.join(output_folder, filename)
-                    with open(filepath, 'wb') as f:
-                        f.write(response.content)
-                    print(f"Downloaded {filename}")
-                else:
-                    print(f"Failed to download {country} datasets for {year}, {component}. Status code: {response.status_code}")
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching {country} datasets for {year}, {component}: {e}")
-
-# Main function to iterate over all countries and fetch datasets
-def main():
+# Function to create subfolders for each country
+def create_country_folders():
     for country in east_horn_africa_countries:
-        fetch_datasets(country)
+        country_folder = os.path.join(output_folder, country)
+        os.makedirs(country_folder, exist_ok=True)
+
+# Function to fetch and download datasets from the webpage
+def fetch_datasets():
+    try:
+        response = requests.get(start_url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Extract dataset links
+        links = soup.find_all('a', href=True)
+        for link in links:
+            href = link['href']
+            if href.lower().endswith('.xlsx'):  # Only download .xlsx files
+                full_url = urljoin(base_url, href)
+                filename = os.path.basename(href)
+                for country in east_horn_africa_countries:
+                    country_folder = os.path.join(output_folder, country)
+                    filepath = os.path.join(country_folder, filename)
+                    try:
+                        file_response = requests.get(full_url)
+                        file_response.raise_for_status()
+                        with open(filepath, 'wb') as f:
+                            f.write(file_response.content)
+                        print(f"Downloaded {filename} for {country}")
+                        # Read all sheets from the downloaded Excel file
+                        if filename.lower().endswith('.xlsx'):
+                            read_excel_sheets(filepath, country)
+
+                    except requests.exceptions.RequestException as e:
+                        print(f"Error downloading {filename} for {country}: {e}")
+                        continue
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching datasets from {start_url}: {e}")
+
+# Function to read and verify the content of downloaded Excel files
+def read_excel_sheets(filepath, country):
+    try:
+        wb = openpyxl.load_workbook(filepath, read_only=True)
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            first_cell_value = sheet.cell(row=1, column=1).value
+            print(f"Read file: {filepath} - Sheet: {sheet_name} - First cell value: {first_cell_value} - Country: {country}")
+
+            # Check if the sheet is an info sheet or matches any dataset types
+            if any(dataset_type in sheet_name.lower() for dataset_type in dataset_types) or "info" in sheet_name.lower():
+                print(f"Found dataset type info or relevant dataset: {sheet_name}")
+
+    except Exception as e:
+        print(f"Error reading {filepath}: {e}")
+
+# Main function to initiate the dataset fetching process
+def main():
+    create_country_folders()
+    fetch_datasets()
 
 if __name__ == "__main__":
     main()
