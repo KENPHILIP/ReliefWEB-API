@@ -19,7 +19,6 @@ import os
 import requests
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-import openpyxl
 
 # Define the base URL and the URL to start scraping from
 base_url = "https://dtm.iom.int"
@@ -40,40 +39,62 @@ def create_country_folders():
     for country in east_horn_africa_countries:
         country_folder = os.path.join(output_folder, country)
         os.makedirs(country_folder, exist_ok=True)
+    print("Created folders for all countries")
 
 # Function to fetch and download datasets from the webpage
 def fetch_datasets():
+    print(f"Fetching datasets from: {start_url}")
     try:
         response = requests.get(start_url)
         response.raise_for_status()  # Raise an exception for HTTP errors
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Extract dataset links
+        # Extract links to dataset pages for each country
         links = soup.find_all('a', href=True)
+        print(f"Found {len(links)} links on the main page.")
         for link in links:
             href = link['href']
-            if href.lower().endswith('.xlsx'):  # Only download .xlsx files
-                full_url = urljoin(base_url, href)
-                filename = os.path.basename(href)
-                for country in east_horn_africa_countries:
-                    country_folder = os.path.join(output_folder, country)
-                    filepath = os.path.join(country_folder, filename)
-                    try:
-                        file_response = requests.get(full_url)
-                        file_response.raise_for_status()
-                        with open(filepath, 'wb') as f:
-                            f.write(file_response.content)
-                        print(f"Downloaded {filename} for {country}")
-                        # Read all sheets from the downloaded Excel file
-                        if filename.lower().endswith('.xlsx'):
-                            read_excel_sheets(filepath, country)
-
-                    except requests.exceptions.RequestException as e:
-                        print(f"Error downloading {filename} for {country}: {e}")
-                        continue
+            text = link.text.strip()
+            for country in east_horn_africa_countries:
+                if country.lower() in text.lower():
+                    filtered_url = urljoin(base_url, href)
+                    print(f"Found link for {country}: {filtered_url}")
+                    fetch_country_datasets(filtered_url, country)
 
     except requests.exceptions.RequestException as e:
         print(f"Error fetching datasets from {start_url}: {e}")
+
+def fetch_country_datasets(url, country):
+    print(f"Fetching datasets for {country} from: {url}")
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Extract dataset links
+        links = soup.find_all('a', href=True)
+        print(f"Found {len(links)} links on the page for {country}.")
+        for link in links:
+            href = link['href']
+            text = link.text.strip()
+            # Only download .xlsx files
+            if href.lower().endswith('.xlsx') or "infosheet" in text.lower():
+                full_url = urljoin(base_url, href)
+                filename = os.path.basename(href)
+                country_folder = os.path.join(output_folder, country)
+                filepath = os.path.join(country_folder, filename)
+                try:
+                    file_response = requests.get(full_url)
+                    file_response.raise_for_status()
+                    with open(filepath, 'wb') as f:
+                        f.write(file_response.content)
+                    print(f"Downloaded {filename} for {country}")
+                except requests.exceptions.RequestException as e:
+                    print(f"Error downloading {filename} for {country}: {e}")
+                    continue
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching datasets for {country} from {url}: {e}")
 
 # Function to read and verify the content of downloaded Excel files
 def read_excel_sheets(filepath, country):
@@ -83,10 +104,6 @@ def read_excel_sheets(filepath, country):
             sheet = wb[sheet_name]
             first_cell_value = sheet.cell(row=1, column=1).value
             print(f"Read file: {filepath} - Sheet: {sheet_name} - First cell value: {first_cell_value} - Country: {country}")
-
-            # Check if the sheet is an info sheet or matches any dataset types
-            if any(dataset_type in sheet_name.lower() for dataset_type in dataset_types) or "info" in sheet_name.lower():
-                print(f"Found dataset type info or relevant dataset: {sheet_name}")
 
     except Exception as e:
         print(f"Error reading {filepath}: {e}")
