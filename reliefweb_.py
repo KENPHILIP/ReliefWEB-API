@@ -32,8 +32,6 @@ from datetime import datetime
 # give a code to clear the folder
 #!rm -rf /content/DTM_IOM_datasets
 
-
-
 #from google.colab import drive
 #drive.mount('/content/drive')
 
@@ -59,6 +57,10 @@ df_excel_icpac.to_csv('filtered_icpac_disaster_data.csv', index=False)
 print(df_excel_icpac.tail())
 
 
+
+import requests
+import pandas as pd
+from pandas import json_normalize
 
 # List of ICPAC countries
 icpac_countries = [
@@ -91,40 +93,70 @@ for country in icpac_countries:
     # POST request
     response = requests.post("https://api.reliefweb.int/v1/disasters", headers=headers, json=payload, timeout=60)
 
-    # Check response status
-    if response.status_code == 200:
-        disaster_data = response.json()
-        disasters = disaster_data.get("data", [])
-
-        # Extract and process the data
-        for disaster in disasters:
-            fields = disaster.get("fields", {})
-            description = fields.get("description", "Data not available")
-            country_info = fields.get("country", [{"name": "N/A"}])[0]
-            country_name = country_info.get("name", "N/A")
-
-            data = {
-                "id": fields.get("id", "N/A"),
-                "name": fields.get("name", "N/A"),
-                "country": country_name,
-                "date": fields.get("date", "N/A"),
-                "description": description,
-                "type": fields.get("type", "N/A"),
-                "status": fields.get("status", "N/A"),
-                "glide": fields.get("glide", "N/A"),
-                "url": fields.get("url", "N/A")
-            }
-            all_data_list.append(data)
-    else:
+    # Print response content for debugging
+    if response.status_code != 200:
         print(f"Failed to retrieve data for {country}: {response.status_code}")
+        print("Response Content:", response.text)
+        continue
+
+    disaster_data = response.json()
+    disasters = disaster_data.get("data", [])
+
+    # Extract and process the data
+    for disaster in disasters:
+        fields = disaster.get("fields", {})
+        description = fields.get("description", "Data not available")
+        country_info = fields.get("country", [{"name": "N/A"}])[0]
+        country_name = country_info.get("name", "N/A")
+
+        # Prepare data for each disaster
+        data = {
+            "id": fields.get("id", "N/A"),
+            "name": fields.get("name", "N/A"),
+            "country": country_name,
+            "date": fields.get("date", "N/A"),
+            "description": description,
+            "type": fields.get("type", "N/A"),
+            "status": fields.get("status", "N/A"),
+            "glide": fields.get("glide", "N/A"),
+            "url": fields.get("url", "N/A")
+        }
+        all_data_list.append(data)
 
 # Create dataframe from the combined data list
 df_reliefweb = pd.DataFrame(all_data_list)
 
+# Ensure 'date' column is in string format
+df_reliefweb['date'] = df_reliefweb['date'].astype(str)
+
+# Extract the date part and split into year, month, and day
+if 'date' in df_reliefweb.columns:
+    # Extract date part (YYYY-MM-DD) from ISO 8601 timestamp
+    df_reliefweb['date'] = df_reliefweb['date'].str.split('T', expand=True)[0]
+
+    # Split the date part into separate columns for year, month, and day
+    df_reliefweb[['year', 'month', 'day']] = df_reliefweb['date'].str.split('-', expand=True)
+
+# Normalize and explode 'type' column
+if 'type' in df_reliefweb.columns:
+    # Normalize 'type' column (convert list of dicts to separate rows)
+    type_normalized = df_reliefweb['type'].apply(pd.json_normalize)
+
+    # Combine normalized 'type' data into a single DataFrame
+    type_expanded = pd.concat(type_normalized.tolist(), ignore_index=True)
+
+    # Rename columns in type_expanded to avoid overlap
+    type_expanded.columns = [f"type_{col}" if col in df_reliefweb.columns else col for col in type_expanded.columns]
+
+    # Concatenate the original dataframe with the expanded 'type' DataFrame
+    df_reliefweb = df_reliefweb.drop(columns=['type']).join(type_expanded)
+else:
+    print("Type column is missing.")
+
 # Save to disasters_data_icpac.csv
 df_reliefweb.to_csv('disasters_data_icpac.csv', index=False)
 
-#modify to capture disasters like heatwave/heat stress/ extreme heat(available on GlideNumber)
+print("Data has been successfully processed and saved.")
 
 # URL for the HTML page
 html_url = "https://floodobservatory.colorado.edu/Version3/MasterListrev.htm"
@@ -141,8 +173,7 @@ for link in links:
 df_reliefweb.columns
 
 # Read the CSV file into a DataFrame
-df_emdat = pd.read_csv("/content/public_emdat_custom_request_2024-07-11_aa4cbcb5-2596-4ad8-84fc-bd502aa8b051.csv")
+#df_emdat = pd.read_csv("/content/public_emdat_custom_request_2024-07-11_aa4cbcb5-2596-4ad8-84fc-bd502aa8b051.csv")
 
 # Print the first few rows of the DataFrame
 #print(df_emdat.head())
-
